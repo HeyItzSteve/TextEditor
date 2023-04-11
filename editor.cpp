@@ -22,7 +22,6 @@ vector<string> fileContents;
 //Function declarations
 void printCurrentContents(vector<string> file);
 int cursorRep(string cmd, int cmdSize);
-void insertText(string currentText, string inputText);
 
 int main(int argc, char **argv) {
 
@@ -83,13 +82,10 @@ int main(int argc, char **argv) {
         if(undoHistory.size() == 0 && redoHistory.size() == 0 && saveState) {
             saveStateContents = fileContents;
         }
-        cout << redoHistoryClear << " " << saveStateIndex << " " << undoHistory.size() << " " << redoHistory.size() << endl;
-        cout << ((undoHistory.size() == 0 && saveStateIndex == 0 && redoHistory.size() == 0)) << " " << (saveStateIndex == undoHistory.size() && !redoHistoryClear) << " " << ((abs((saveStateIndex - undoHistory.size()) * 1.0) == redoHistory.size()) && redoHistory.size() != 0 && undoHistory.size() != 0) << " " << (saveStateContents == fileContents) << endl;
+
         if(((undoHistory.size() == 0 && saveStateIndex == 0 && redoHistory.size() == 0) || (saveStateIndex == undoHistory.size() && !redoHistoryClear)) && saveStateContents == fileContents) {
-            cout << "in save state" << endl;
             saveState = true;
         } else {
-            cout << "not in save state" << endl;
             saveState = false;
         }
 
@@ -117,11 +113,11 @@ int main(int argc, char **argv) {
                     cout << endl << "Goodbye!" << endl;
                     return 0;
                 } else if(conf == 'n') {
-                   getline(cin, cmd);
+                    getline(cin, cmd);
                 }
             }
             
-        } else if(cmd.substr(0, 4) == "save" && cmd.size() > 5) { //save file
+        } else if(cmd.substr(0, 4) == "save") { //save file
             ofstream saveFile(cmd.substr(5));
             for(unsigned int i = 0; i < fileLength; i++) {
                 saveFile << fileContents[i] << endl;
@@ -195,6 +191,13 @@ int main(int argc, char **argv) {
         } else if(cmd.substr(0, 1) == "i" && cmd.size() > 2) { //insert
             string str = cmd.substr(2);
             string text = fileContents[cursor[1]-1];
+            string newText;
+
+            string currentLine;
+
+            int len = str.size();
+            int currLen;
+            unsigned int overflow = ceil(len / 20.0);
             
             undoHistory.push(fileContents);
             if(saveState) {
@@ -202,7 +205,140 @@ int main(int argc, char **argv) {
                 saveStateIndex = undoHistory.size() - 1;
             }
 
-            insertText(text, str);
+            if(cursor[0] == 1 && str.size() <= 20) { //insertion at front of line
+                if(str.size() < text.size()) { //if insert text is smaller than current line size
+                    newText = str + text.substr(str.size());
+                    fileContents[cursor[1]-1] = newText;
+                } else { //replaces current text with insert text if larger
+                    newText = str;
+                    fileContents[cursor[1]-1] = newText;
+                }
+		    } else if(cursor[0] > 1 && (str.size() + cursor[0]-1) <= 20 && text.size() >= cursor[0]) { //insertion in middle of line with text
+                if(cursor[0] != text.size() && str.size() < text.size()-(cursor[0]-1)) { //if cursor[0] not at end of line text and insert text is smaller than current line size at cursor
+                    newText = text.substr(0,cursor[0]-1) + str + text.substr(cursor[0]+(str.size()-1)); 
+                    fileContents[cursor[1]-1] = newText;
+                } else { //replaces current text with insert text if larger at cursor
+                    newText = text.substr(0,cursor[0]-1) + str;
+                    fileContents[cursor[1]-1] = newText;
+                }
+            } else if(cursor[0] > 1 && (str.size() + cursor[0]-1) <= 20 && text.size() < cursor[0]) { //insertion past end of line of text
+                newText = text;
+                for(unsigned int i = 0; i < cursor[0]-1 - text.size(); i++) {
+                    newText = newText + " ";
+                }
+                newText = newText + str;
+                fileContents[cursor[1]-1] = newText;
+            } else if(cursor[0] == 1 && str.size() > 20) { //insertion at front of line, input is larger than line size
+                for(unsigned int i = 0; i <= overflow; i++) {
+                    if((cursor[1]-1)+i < fileLength) {
+                        currentLine = fileContents[(cursor[1]-1)+i];
+                    } else {
+                        currentLine = "";
+                    }
+
+                    if(len > 20) {
+                        currLen = 20;
+                        newText = str.substr(0,currLen);
+                    } else if(len <= 20 && len > 0) {
+                        currLen = str.size();
+                        if(currentLine.size() > str.size()) { //replaces part of current line text with input
+                            newText = str.substr(0,currLen) + currentLine.substr(len);
+                        } else {
+                            newText = str.substr(0,currLen); 
+                        }
+                    } else if(len <= 0) {
+                        break;
+                    }
+                    if((cursor[1]-1)+i < fileLength) {
+                        fileContents[(cursor[1]-1)+i] = newText;
+                    } else if((cursor[1]-1)+i >= fileLength && fileLength < 30 && len > 0) {
+                        fileContents.push_back(newText);
+                        fileLength = fileContents.size();
+                    }
+                    len-=20;
+                    str = str.substr(currLen);
+                }
+            } else if(cursor[0] > 1 && str.size() > (20-cursor[0]) && text.size() >= cursor[0]) { //insertion in middle of line with text, input is larger than line size
+                for(unsigned int i = 0; i <= overflow; i++) {
+                    if((cursor[1]-1)+i < fileLength) {
+                        currentLine = fileContents[(cursor[1]-1)+i];
+                    } else {
+                        currentLine = "";
+                    }
+                    
+                    if(i == 0 && (len+text.size() > 20)) {
+                        currLen = 20-(text.substr(0,cursor[0]-1)).size();
+                        newText = text.substr(0,cursor[0]-1) + str.substr(0,currLen);
+                    } else if(i != 0 && len > 20) {
+                        currLen = 20;
+                        newText = str.substr(0,currLen);
+                    } else if(len <= 20 && len > 0) {
+                        currLen = str.size();
+                        if(currentLine.size() > str.size()) { //replaces part of current line text with input
+                            newText = str.substr(0,currLen) + currentLine.substr(len);
+                        } else {
+                            newText = str.substr(0,currLen);
+                        }
+                    } else if(len <= 0) {
+                        break;
+                    }
+                    if((cursor[1]-1)+i < fileLength) {
+                        fileContents[(cursor[1]-1)+i] = newText;
+                    } else if((cursor[1]-1)+i >= fileLength && fileLength < 30 && len > 0) {
+                        fileContents.push_back(newText);
+                        fileLength = fileContents.size();
+                    }
+                    if(i == 0) {
+                        len-=currLen;
+                    } else {
+                        len-=20;
+                    }
+                    
+                    str = str.substr(currLen);
+                }  
+            } else if(cursor[0] > 1 && str.size() > (20-cursor[0]) && text.size() < cursor[0]) { //insertion past end of line of text, insert text larger than line limit
+                for(unsigned int i = 0; i <= overflow; i++) {
+                    if((cursor[1]-1)+i < fileLength) {
+                        currentLine = fileContents[(cursor[1]-1)+i];
+                    } else {
+                        currentLine = "";
+                    }
+
+                    if(i == 0) {
+                        newText = text;
+                        for(unsigned int i = 0; i < cursor[0]-1 - text.size(); i++) {
+                            newText = newText + " ";
+                        }
+                        currLen = 20-newText.size();
+                        newText = newText + str.substr(0,currLen);
+                    } else if(i != 0 && len > 20) {
+                        currLen = 20;
+                        newText = str.substr(0,currLen);
+                    } else if(len <= 20 && len > 0) {
+                        currLen = str.size();
+                        if(currentLine.size() > str.size()) { //replaces part of current line text with input
+                            newText = str.substr(0,currLen) + currentLine.substr(len);
+                        } else {
+                            newText = str.substr(0,currLen);
+                        }
+                    } else if(len <= 0) {
+                        break;
+                    }
+                    if((cursor[1]-1)+i < fileLength) {
+                        fileContents[(cursor[1]-1)+i] = newText;
+                    } else if((cursor[1]-1)+i >= fileLength && fileLength < 30 && len > 0) {
+                        fileContents.push_back(newText);
+                        fileLength = fileContents.size();
+                    }
+                    if(i == 0) {
+                        len-=currLen;
+                    } else {
+                        len-=20;
+                    }
+                    
+                    str = str.substr(currLen);
+                }
+            }
 
             for(unsigned int i = 0; i < redoHistory.size(); i++) { //deletes redoHistory upon insertion
                 redoHistory.pop();
@@ -239,150 +375,6 @@ void printCurrentContents(vector<string> file) {
     }
 
     cout << setw(5) << "" << headerGuide << endl;
-}
-
-void insertText(string text, string str) {
-    string newText;
-    string currentLine;
-
-    int len = str.size();
-    int currLen;
-    unsigned int overflow = ceil(len / 20.0);
-
-    if(cursor[0] == 1 && str.size() <= 20) { //insertion at front of line
-        if(str.size() < text.size()) { //if insert text is smaller than current line size
-            newText = str + text.substr(str.size());
-            fileContents[cursor[1]-1] = newText;
-        } else { //replaces current text with insert text if larger
-            newText = str;
-            fileContents[cursor[1]-1] = newText;
-        }
-    } else if(cursor[0] > 1 && (str.size() + cursor[0]-1) <= 20 && text.size() >= cursor[0]) { //insertion in middle of line with text
-        if(cursor[0] != text.size() && str.size() < text.size()-(cursor[0]-1)) { //if cursor[0] not at end of line text and insert text is smaller than current line size at cursor
-            newText = text.substr(0,cursor[0]-1) + str + text.substr(cursor[0]+(str.size()-1)); 
-            fileContents[cursor[1]-1] = newText;
-        } else { //replaces current text with insert text if larger at cursor
-            newText = text.substr(0,cursor[0]-1) + str;
-            fileContents[cursor[1]-1] = newText;
-        }
-    } else if(cursor[0] > 1 && (str.size() + cursor[0]-1) <= 20 && text.size() < cursor[0]) { //insertion past end of line of text
-        newText = text;
-        for(unsigned int i = 0; i < cursor[0]-1 - text.size(); i++) {
-            newText = newText + " ";
-        }
-        newText = newText + str;
-        fileContents[cursor[1]-1] = newText;
-    } else if(cursor[0] == 1 && str.size() > 20 && cursor[1]+(floor((str.size()-1)/20.0)) <= 30) { //insertion at front of line, input is larger than line size
-        for(unsigned int i = 0; i <= overflow; i++) {
-            if((cursor[1]-1)+i < fileLength) {
-                currentLine = fileContents[(cursor[1]-1)+i];
-            } else {
-                currentLine = "";
-            }
-
-            if(len > 20) {
-                currLen = 20;
-                newText = str.substr(0,currLen);
-            } else if(len <= 20 && len > 0) {
-                currLen = str.size();
-                if(currentLine.size() > str.size()) { //replaces part of current line text with input
-                    newText = str.substr(0,currLen) + currentLine.substr(len);
-                } else {
-                    newText = str.substr(0,currLen); 
-                }
-            } else if(len <= 0) {
-                break;
-            }
-            if((cursor[1]-1)+i < fileLength) {
-                fileContents[(cursor[1]-1)+i] = newText;
-            } else if((cursor[1]-1)+i >= fileLength && fileLength < 30 && len > 0) {
-                fileContents.push_back(newText);
-                fileLength = fileContents.size();
-            }
-            len-=20;
-            str = str.substr(currLen);
-        }
-    } else if(cursor[0] > 1 && str.size() > (20-cursor[0]) && text.size() >= cursor[0]) { //insertion in middle of line with text, input is larger than line size
-        for(unsigned int i = 0; i <= overflow; i++) {
-            if((cursor[1]-1)+i < fileLength) {
-                currentLine = fileContents[(cursor[1]-1)+i];
-            } else {
-                currentLine = "";
-            }
-            
-            if(i == 0 && (len+text.size() > 20)) {
-                currLen = 20-(text.substr(0,cursor[0]-1)).size();
-                newText = text.substr(0,cursor[0]-1) + str.substr(0,currLen);
-            } else if(i != 0 && len > 20) {
-                currLen = 20;
-                newText = str.substr(0,currLen);
-            } else if(len <= 20 && len > 0) {
-                currLen = str.size();
-                if(currentLine.size() > str.size()) { //replaces part of current line text with input
-                    newText = str.substr(0,currLen) + currentLine.substr(len);
-                } else {
-                    newText = str.substr(0,currLen);
-                }
-            } else if(len <= 0) {
-                break;
-            }
-            if((cursor[1]-1)+i < fileLength) {
-                fileContents[(cursor[1]-1)+i] = newText;
-            } else if((cursor[1]-1)+i >= fileLength && fileLength < 30 && len > 0) {
-                fileContents.push_back(newText);
-                fileLength = fileContents.size();
-            }
-            if(i == 0) {
-                len-=currLen;
-            } else {
-                len-=20;
-            }
-            
-            str = str.substr(currLen);
-        }  
-    } else if(cursor[0] > 1 && str.size() > (20-cursor[0]) && text.size() < cursor[0]) { //insertion past end of line of text, insert text larger than line limit
-        for(unsigned int i = 0; i <= overflow; i++) {
-            if((cursor[1]-1)+i < fileLength) {
-                currentLine = fileContents[(cursor[1]-1)+i];
-            } else {
-                currentLine = "";
-            }
-
-            if(i == 0) {
-                newText = text;
-                for(unsigned int i = 0; i < cursor[0]-1 - text.size(); i++) {
-                    newText = newText + " ";
-                }
-                currLen = 20-newText.size();
-                newText = newText + str.substr(0,currLen);
-            } else if(i != 0 && len > 20) {
-                currLen = 20;
-                newText = str.substr(0,currLen);
-            } else if(len <= 20 && len > 0) {
-                currLen = str.size();
-                if(currentLine.size() > str.size()) { //replaces part of current line text with input
-                    newText = str.substr(0,currLen) + currentLine.substr(len);
-                } else {
-                    newText = str.substr(0,currLen);
-                }
-            } else if(len <= 0) {
-                break;
-            }
-            if((cursor[1]-1)+i < fileLength) {
-                fileContents[(cursor[1]-1)+i] = newText;
-            } else if((cursor[1]-1)+i >= fileLength && fileLength < 30 && len > 0) {
-                fileContents.push_back(newText);
-                fileLength = fileContents.size();
-            }
-            if(i == 0) {
-                len-=currLen;
-            } else {
-                len-=20;
-            }
-            
-            str = str.substr(currLen);
-        }
-    }
 }
 
 int cursorRep(string cmd, int cmdSize) {
