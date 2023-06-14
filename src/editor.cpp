@@ -1,10 +1,8 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
-#include <sstream>
 #include <string>
 #include <vector>
-#include <array>
 #include <stack>
 #include <cmath>
 
